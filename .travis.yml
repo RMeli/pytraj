@@ -2,11 +2,13 @@ language: cpp
 
 matrix:
   include:
-    - { os: linux, env: PYTHON_VERSION=2.7 PYPY=true }
+    # - { os: linux, env: PYTHON_VERSION=2.7 PYPY=true }
     - { os: linux, env: PYTHON_VERSION=2.7 }
     - { os: linux, env: PYTHON_VERSION=3.6 }
     - { os: linux, env: PYTHON_VERSION=3.6 USE_OPENMP=false }
+      # - { os: linux, env: PYTHON_VERSION=3.7 }
     - { os: osx, env: PYTHON_VERSION=3.6 }
+
 
 sudo: false
 
@@ -45,6 +47,7 @@ install:
 script:
     - if [ "$TRAVIS_OS_NAME" = "osx" ]; then
           unset CC CXX;
+          sw_vers;
       else
         export CXX=g++-6;
         export CC=gcc-6;

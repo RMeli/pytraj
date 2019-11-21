@@ -103,6 +103,10 @@ def test_load_comprehensive():
     t1 = pt.load(trajin, tn, frame_indices=(0, 3))
     aa_eq(t1.xyz, traj[[0, 3]].xyz)
 
+    # frame_indices with negative index
+    t12 = pt.load(trajin, tn, frame_indices=(-2, -1))
+    aa_eq(t12.xyz, traj[[traj.n_frames-2, traj.n_frames-1]].xyz)
+
     # mask and frame_indices
     t2 = pt.load(trajin, tn, mask='@CA', frame_indices=[3, 8])
     aa_eq(t2.xyz, traj[[3, 8], '@CA'].xyz)
@@ -315,7 +319,7 @@ def test_formats():
         with open(fn, 'r') as fh:
             lines = [fh.readline() for _ in range(3)]
         # print(lines)
-        assert expected_line in lines[line_index]
+        assert expected_line in lines[line_index], lines[line_index]
 
     def assert_has_exptected_line_binaryfile(expected_line, fn='test'):
         with open(fn, 'rb') as fh:
@@ -329,7 +333,7 @@ def test_formats():
     with tempfolder():
         # pdb
         traj.save(fn, format='pdb', overwrite=True)
-        expected_line = 'ATOM      1  N   SER     1      -1.889   9.159   7.569'
+        expected_line = 'ATOM      1  N   SER'
         assert_has_exptected_line_textfile(expected_line, 0, fn)
 
         # mol2
@@ -424,6 +428,9 @@ def test_write_velocity_from_scratch():
         traj2 = pt.iterload(out_fn, top=traj.top)
         assert traj2.metadata['has_velocity']
         assert not traj2.metadata['has_force']
+        # make sure no segmentation fault
+        # issues/1486
+        assert traj2[:].n_frames == traj2.n_frames
 
 
 def test_write_force_from_scratch():
@@ -446,6 +453,8 @@ def test_write_force_from_scratch():
         traj2 = pt.iterload(out_fn, top=traj.top)
         assert traj2.metadata['has_force']
         assert not traj2.metadata['has_velocity']
+        # issues/1486
+        assert traj2[:].n_frames == traj2.n_frames
 
 
 def test_write_both_force_and_velocity_from_scratch():

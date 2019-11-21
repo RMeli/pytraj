@@ -133,6 +133,9 @@ __all__ = [
     'rotdif',
     'ti',
     'lipidscd',
+    'xtalsymm',
+    'hausdorff',
+    'permute_dihedrals',
 ]
 
 
@@ -170,7 +173,10 @@ def distance(traj=None,
     Parameters
     ----------
     traj : Trajectory-like, list of Trajectory, list of Frames
-    mask : str or a list of string or a 2D array-like of integers
+    mask : str or a list of string or a 2D array-like of integers.
+           If `mask` is a 2D-array, the `image` option is always `False`.
+           In this case, make sure to `autoimage` your trajectory before
+           calling `distance`.
     frame_indices : array-like, optional, default None
     dtype : return type, default 'ndarray'
     top : Topology, optional
@@ -3061,6 +3067,50 @@ def lipidscd(traj, mask='', options='', dtype='dict'):
     return get_data_from_dtype(c_dslist, dtype=dtype)
 
 
+@super_dispatch()
+def xtalsymm(traj, mask='', options='', ref=None, **kwargs):
+    '''
+    
+    Parameters
+    ----------
+    traj : Mutable `pytraj.Trajectory`
+    mask : str, default '' (all)
+    options : str, extra cpptraj's options
+        See `pytraj.info("xtalsymm")` for further information.
+        NOTE: Should not provide 'mask' or 'reference' in `options`, use the keyword arguments.
+    ref : Frame | Trajectory
+        Reference frame
+    kwargs : dummy key words arguments for `super_dispatch`
+
+    Examples
+    --------
+        >>> pytraj.xtalsymm(traj, mask=':1-16', ref=ref, options="group P22(1)2(1) na 2 nb 1 nc 1") # doctest: +SKIP
+    '''
+    top = traj.top
+    command = ' '.join((mask, options))
+
+    c_dslist = CpptrajDatasetList()
+
+    if ref is not None:
+        c_dslist.add('reference', name='xtalsymm_ref')
+        c_dslist[0].top = top
+        c_dslist[0].add_frame(ref)
+        command = ' '.join((command, 'reference'))
+
+    act = c_action.Action_XtalSymm()
+    act.read_input(command, top=top, dslist=c_dslist)
+    act.setup(top)
+
+    for frame in traj:
+        act.compute(frame)
+    act.post_process()
+
+    # remove ref
+    c_dslist._pop(0)
+
+    return traj
+
+
 def analyze_modes(mode_type,
                   eigenvectors,
                   eigenvalues,
@@ -3108,3 +3158,64 @@ def ti(fn, options=''):
     command = 'TI_set ' + options
     act(command, dslist=c_dslist)
     return c_dslist
+
+
+def hausdorff(matrix, options='', dtype='ndarray'):
+    """
+
+    Parameters
+    ----------
+    matrix : 2D array
+    option : str
+        cpptraj options
+
+    Returns
+    -------
+    out : 1D numpy array
+
+    Notes
+    -----
+        - cpptraj help: pytraj.info('hausdorff')
+    """
+    c_dslist = CpptrajDatasetList()
+    c_dslist.add('matrix_dbl', name='my_matrix')
+    c_dslist[0].data = np.asarray(matrix, dtype='f8')
+    act = c_analysis.Analysis_Hausdorff()
+    command = " ".join(("my_matrix", options))
+    act(command, dslist=c_dslist)
+    c_dslist._pop(0)
+    data = get_data_from_dtype(c_dslist, dtype)
+    return data
+
+
+def permute_dihedrals(traj, filename, options=''):
+    """
+    Parameters
+    ----------
+    traj : Trajectory like
+    filename : str
+        Output filename for resulted trajectory
+    options: str
+        cpptraj's option. Do not specify `outtraj` here since
+        it's specified in `filename`.
+
+    This function returns None.
+    """
+    from .core.c_core import CpptrajState, Command
+
+    state = CpptrajState()
+    top_data = state.data.add('topology', name='my_top')
+    top_data.data = traj.top
+
+    ref_data = state.data.add('coords', name='my_coords')
+    ref_data.top = traj.top
+    for frame in traj:
+       ref_data.add_frame(frame)
+
+    command = 'permutedihedrals crdset my_coords {options} outtraj {filename}'.format(
+            options=options, filename=filename)
+
+    with Command() as executor:
+        executor.dispatch(state, command)
+    state.data._pop(0)
+    state.data._pop(0)
